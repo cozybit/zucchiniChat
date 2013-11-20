@@ -7,9 +7,7 @@ import java.util.Map;
 
 import android.app.ActionBar;
 import android.app.ActionBar.Tab;
-import android.app.AlertDialog;
 import android.app.FragmentTransaction;
-import android.content.DialogInterface;
 import android.net.wifi.p2p.WifiP2pDevice;
 import android.net.wifi.p2p.WifiP2pManager.DnsSdServiceResponseListener;
 import android.net.wifi.p2p.WifiP2pManager.DnsSdTxtRecordListener;
@@ -17,20 +15,16 @@ import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.widget.EditText;
 
 import com.cozybit.chord_chat.R;
 
 public class ChordChatActivity extends FragmentActivity implements ActionBar.TabListener {
 
 	private static final String LOG_TAG = "ChordChat";
-	public static String DEFAULT_CHANNEL_DISPLAY_NAME = "PUBLIC";
-	
+	public static String DEFAULT_CHANNEL_DISPLAY_NAME = "ACTIVITY";
+
 	private static final String SERVICE_INSTANCE = "_zucchini";
 	private static final String SERVICE_REG_TYPE = "_a._b";
-
 
 	private Configuration config;
 
@@ -44,25 +38,6 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 	private DnsSdTxtRecordListener mDnsSdTxtRecordListener;
 	private DnsSdServiceResponseListener mDnsSdServiceResponseListener;
 
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		Log.d("item ID : ", "onOptionsItemSelected Item ID" + item.getItemId());
-		switch (item.getItemId()) {
-
-		case R.id.menu_channels:
-			showChannelsDialog ();
-		default:
-			return super.onOptionsItemSelected(item);
-		}
-	}
-
-	public boolean onCreateOptionsMenu(Menu menu) {
-		getMenuInflater().inflate(R.menu.options, menu);
-		return true;
-	}
-
-
-
 	protected ArrayList<String> addTab(String name) {
 
 		ArrayList<String> messageList = new ArrayList<String>();
@@ -75,25 +50,22 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 		tab.setTabListener(this);
 		getActionBar().addTab(tab);
 		actionBar.selectTab(tab);
-		
+
+
 		return messageList;
 	}
-	
+
 	protected void removeCurrentTab() {
-		
+
 		int pos = getActionBar().getSelectedTab().getPosition();
 		String name = getActionBar().getSelectedTab().getText().toString();
-		
+
 		tabList.remove(pos);
 		messageMap.remove(name);
-		
+
 		Log.d(LOG_TAG, "tabList.size = " + tabList.size() + " messageMap.size = " + messageMap.size());
-		
+
 		getActionBar().removeTab(getActionBar().getSelectedTab());
-	}
-
-	public void leaveChannel(String name) {
-
 	}
 
 	@Override
@@ -102,7 +74,7 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 
 		messageMap = new HashMap<String, ArrayList<String>>();
 		tabList = new ArrayList<ArrayList<String>>();
-		
+
 		// Zuchinni message queues
 		mInQueue = new LimitedSizeList<ZucchiniMessage>(1000);
 		mOutQueue = new LimitedSizeList<ZucchiniMessage>(2);
@@ -114,8 +86,7 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 
 		if (!config.hasNickname ())
 			config.setNickname("US");
-			//showNickNameDialog ();
-		
+
 		mDnsSdServiceResponseListener = new DnsSdServiceResponseListener() {
 			@Override
 			public void onDnsSdServiceAvailable(String instanceName,
@@ -129,7 +100,7 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 
 			}
 		};
-		
+
 		mDnsSdTxtRecordListener = new DnsSdTxtRecordListener() {
 
 			/**
@@ -140,7 +111,7 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 			public void onDnsSdTxtRecordAvailable(
 					String fullDomainName, Map<String, String> record,
 					WifiP2pDevice device) {
-				
+
 				Log.d(LOG_TAG,device.deviceName + " has " +
 						record.size() + " records.");
 
@@ -148,14 +119,14 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 					ZucchiniMessage zm = new ZucchiniMessage(key, record.get(key), true);
 					if (!mInQueue.contains(zm)) {
 						mInQueue.offer(zm);
-						addToMessageList(zm.getHashTag(), "<OTHERS> " + zm.getMessage());
+						addToMessageList(device.deviceName, zm.getHashTag(), zm.getMessage());
 					} else
 						Log.d(LOG_TAG, "Already in...");
-						
+
 				}
 			}
 		};
-		
+
 		mDiscovery = new ServiceDiscovery();
 
 		mDiscovery.registerLocalService(getApplicationContext(), toRecordsHash(mOutQueue), SERVICE_INSTANCE, SERVICE_REG_TYPE);
@@ -167,25 +138,32 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 		super.onDestroy ();
 	}
 
-	private void addToMessageList (String channel, String message) {
+	private void addToMessageList (String user, String channel, String message) {
 		Log.i (LOG_TAG, "add to message list");
+
 
 		List <String> messageList;
 
 		// New Hashtag received let's add the tab...
 		if (!messageMap.containsKey(channel))
 			messageList = addTab(channel);
-		
-		messageList = messageMap.get(channel);
-		messageList.add(message);
+
+		if (channel != DEFAULT_CHANNEL_DISPLAY_NAME) {
+			messageList = messageMap.get(channel);
+			messageList.add("<" + user + "> " + message);
+		}
+
+		// Also add to the local conversations message list
+		messageList = messageMap.get(DEFAULT_CHANNEL_DISPLAY_NAME);
+		messageList.add(user + " says \"" + message + "\" on #" + channel);
+
 
 		ChannelFragment fragment = (ChannelFragment)
 				getSupportFragmentManager().findFragmentById(R.id.fragment_container);
 
 		fragment.notifyDataSetChanged();
-		
 	}
-	
+
 	public void pushOutZucchiniMessage(String hashtag, String payload) {
 
 		if (hashtag != null && !hashtag.isEmpty() && payload != null && !payload.isEmpty()) {
@@ -196,10 +174,10 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 	}
 
 	public void handleMessageSend (final String channel, String message) {
-		String msg = "<" + config.getNickname () + "> " + message;
-		addToMessageList(channel, msg);
+
+		addToMessageList(config.getNickname(), channel, message);
 		pushOutZucchiniMessage(channel, message);
-		
+
 		if (mDiscovery != null) {
 			/* 
 			 * We need this shit to ensure that WFD has stopped before 
@@ -216,61 +194,8 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 		}
 	}
 
-	private void showChannelNameDialog () {
-		// Set an EditText view to get user input
-		final EditText input = new EditText (this);
-
-		new AlertDialog.Builder (ChordChatActivity.this).setTitle ("Set channel name").setView (input)
-		.setPositiveButton ("Set channel name", new DialogInterface.OnClickListener () {
-			@Override
-			public void onClick (DialogInterface dialog, int whichButton) {
-				if (input.getText().length() == 0) {
-					// do nothing
-				}
-
-				if (input.getText().length() > 0) {
-					config.setChannelname (input.getText().toString());
-					Log.i(LOG_TAG, "Adding tab = " + config.getChannelName());
-					// add tab for channel
-					addTab(config.getChannelName());
-				}
-			}
-		})
-		.setNegativeButton ("Cancel", new DialogInterface.OnClickListener () {
-			@Override
-			public void onClick (DialogInterface dialog, int whichButton) {
-				// user cancelled
-			}
-		})
-		.show ();
-	}
-
-	private void showChannelsDialog () {
-		final CharSequence[] items = {"Create HashTag"};//, "Leave Channel"};
-
-		new AlertDialog.Builder (ChordChatActivity.this).setTitle ("Set nickname")
-		.setTitle("Channels").setItems(items, new DialogInterface.OnClickListener() {
-			public void onClick(DialogInterface dialog, int which) {
-				Log.i("Clicked on a channel dialog item = " +  which, "DEBUG");
-				// The 'which' argument contains the index position
-				// of the selected item
-				switch (which) {
-				case 0:
-					// join channel, add dynamic tab
-					showChannelNameDialog ();
-					break;
-				/*case 1:
-					removeCurrentTab();
-					break;*/
-				}
-			}
-		})
-		.show ();
-	}
-
-	
 	// implements ActionBar.TabListener
-	
+
 	@Override
 	public void onTabReselected(Tab tab, FragmentTransaction ft) {
 
@@ -298,23 +223,39 @@ public class ChordChatActivity extends FragmentActivity implements ActionBar.Tab
 	public void onTabUnselected(Tab tab, FragmentTransaction ft) {
 
 	}
-	
+
 	/* Interface to receive callbacks from ServiceDiscovery */
 	public interface DiscoveryStopListener {
 		public void onSuccess();
 	}
-	
+
 	/* Convert the List of ZucchiniMessages to a record hash */
 	public Map<String, String> toRecordsHash(LimitedSizeList<ZucchiniMessage> queue) {
-		
+
 		Map<String, String> map = new HashMap<String, String>();
-		
+
 		for (ZucchiniMessage zucchiniMessage : queue) {
 			Log.d(LOG_TAG, "ZM " + zucchiniMessage.getHashTag() + " " + zucchiniMessage.printRecordMessage());
 			map.put(zucchiniMessage.getHashTag(), zucchiniMessage.printRecordMessage());
 		}
-		
+
 		return map;
 	}
-	
+
+	private Tab getTabByName(String name) {
+		if (messageMap.containsKey(name)) {
+			int index = tabList.indexOf(messageMap.get(name));
+			return getActionBar().getTabAt(index);
+		}
+		return null;
+	}
+
+	private void setSelectedTab (Tab tab) {
+		if (tab != null)
+			getActionBar().selectTab(tab);
+	}
+
+	public void setSelectedTabByName (String name) {
+		setSelectedTab(getTabByName(name));
+	}
 }
