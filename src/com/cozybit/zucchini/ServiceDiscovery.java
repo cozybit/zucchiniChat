@@ -28,6 +28,9 @@ public class ServiceDiscovery {
 	private DnsSdServiceResponseListener mDnsListener;
 	private Thread mDiscoveryThread;
 
+	private String mServiceInstance;
+	private String mServiceRegType;
+
 	private static final String TAG = "ServiceDiscovery";
 
 	public void registerLocalService(final Context context, Map<String, String> record, String serviceInstance, String serviceRegType) {
@@ -45,38 +48,18 @@ public class ServiceDiscovery {
 			}
 		}); 
 
+		mServiceInstance = serviceInstance;
+		mServiceRegType = serviceRegType;
+
 		mService = WifiP2pDnsSdServiceInfo.newInstance(
-				serviceInstance, serviceRegType, record);
+				mServiceInstance, mServiceRegType, record);
 
-		mManager.addLocalService(mChannel, mService, new ActionListener() {
+		mManager.clearLocalServices(mChannel, new ActionListener() {
 
 			@Override
 			public void onSuccess() {
-				Log.d(TAG, "Added local service");
-			}
-
-			@Override
-			public void onFailure(int reason) {
-				Log.e(TAG, "Failed adding local service");
-				Toast.makeText(context, "Failure adding local ervice", Toast.LENGTH_SHORT).show();
-			}
-		});
-	}
-/*
-	public void updateLocalService(final Map<String, String> record, final String serviceInstance, final String serviceRegType) {
-		mManager.removeLocalService(mChannel, mService, new ActionListener() {
-			
-			@Override
-			public void onSuccess() {
-				Log.d(TAG, "Removed local service");
-	
-				mService = null;
-				Log.d(TAG, "Added local service");
-
-				mService = WifiP2pDnsSdServiceInfo.newInstance(
-						serviceInstance, serviceRegType, record);
-				
 				mManager.addLocalService(mChannel, mService, new ActionListener() {
+
 					@Override
 					public void onSuccess() {
 						Log.d(TAG, "Added local service");
@@ -84,20 +67,22 @@ public class ServiceDiscovery {
 
 					@Override
 					public void onFailure(int reason) {
-						Log.e(TAG, "Failed adding local service, reason:" + reason);
+						Log.e(TAG, "Failed adding local service");
+						Toast.makeText(context, "Failure adding local service", Toast.LENGTH_SHORT).show();
 					}
 				});
-				
 			}
-			
+
 			@Override
 			public void onFailure(int reason) {
-				Log.e(TAG, "Failed adding local service");
+				// TODO Auto-generated method stub
+
 			}
 		});
+
+
 	}
-*/
-	
+
 	public void discoverRemoteServices(DnsSdServiceResponseListener dnsListener, DnsSdTxtRecordListener recordListener) {
 
 		mDnsListener = dnsListener;
@@ -127,18 +112,18 @@ public class ServiceDiscovery {
 				if (listener != null)
 					listener.onSuccess();
 			}
-			
+
 			@Override
 			public void onFailure(int reason) {
 				Log.e(TAG, "Failed removing local service");
 			}
 		});
-		
+
 		mDnsListener = null;
 		mRecordListener = null;
 
 	}
-	
+
 	public boolean isDiscovering() {
 		return isDiscovering;
 	}
@@ -149,10 +134,10 @@ public class ServiceDiscovery {
 
 	public Runnable discoveryRunnable = new Runnable()
 	{
-	    @Override
-	    public void run()
-	    {
-	    	
+		@Override
+		public void run()
+		{
+
 			/*
 			 * Register listeners for DNS-SD services. These are callbacks invoked
 			 * by the system when a service is actually discovered.
@@ -161,7 +146,7 @@ public class ServiceDiscovery {
 
 			// After attaching listeners, create a service request and initiate
 			// discovery.
-			mServiceRequest = WifiP2pDnsSdServiceRequest.newInstance();
+			mServiceRequest = WifiP2pDnsSdServiceRequest.newInstance(mServiceInstance, mServiceRegType);
 
 			mManager.addServiceRequest(mChannel, mServiceRequest,
 					new ActionListener() {
@@ -176,25 +161,25 @@ public class ServiceDiscovery {
 					Log.e(TAG, "Failed adding service discovery request");
 				}
 			});
-	    	
-	    	isDiscovering = true;
-	    	
-	        while (isDiscovering)
-	        {
-	            try
-	            {
-	            	if (mManager == null)
-	            		break;
-	            	
-	            	Log.d(TAG, "Discover...");
-	            	mManager.discoverServices(mChannel, null);
-	                Thread.sleep(5000);// sleeps 5 seconds
-	            }
-	            catch (InterruptedException e) {}
-	        }
-	        //Clean up all the mess
-	        mManager.removeServiceRequest(mChannel, mServiceRequest, null);
-	        mServiceRequest = null;
-	    }
+
+			isDiscovering = true;
+
+			while (isDiscovering)
+			{
+				try
+				{
+					if (mManager == null)
+						break;
+
+					Log.d(TAG, "Discover...");
+					mManager.discoverServices(mChannel, null);
+					Thread.sleep(5000);// sleeps 5 seconds
+				}
+				catch (InterruptedException e) {}
+			}
+			//Clean up all the mess
+			mManager.removeServiceRequest(mChannel, mServiceRequest, null);
+			mServiceRequest = null;
+		}
 	};
 }
